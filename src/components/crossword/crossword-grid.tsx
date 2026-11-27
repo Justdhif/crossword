@@ -7,7 +7,7 @@ import { useCrossword } from "@/context/crossword-context";
 import { cn } from "@/lib/utils";
 
 export function CrosswordGrid() {
-  const { state, selectedClueId, setSelectedClueId, activeAction } = useCrossword();
+  const { state, selectedClueId, activeAction } = useCrossword();
 
   // Determine if a cell is part of the currently active action (wrong or correct)
   const isCellInActiveAction = (wordIds: string[]) => {
@@ -22,7 +22,7 @@ export function CrosswordGrid() {
   };
 
   return (
-    <div className="relative flex flex-col items-start select-none">
+    <div className="relative flex flex-col items-start select-none w-full">
       {/* Grid container without heavy shadow, clean border */}
       <div className="relative max-w-full overflow-x-auto no-scrollbar rounded-2xl bg-white p-2 sm:p-4 border border-slate-200/90 dark:bg-slate-900/90 dark:border-slate-800">
         <div
@@ -55,17 +55,6 @@ export function CrosswordGrid() {
               return (
                 <motion.div
                   key={cellKey}
-                  onClick={() => {
-                    // Clicking cell displays the corresponding question
-                    if (cell.wordIds.length === 1) {
-                      setSelectedClueId(cell.wordIds[0]);
-                    } else if (cell.wordIds.length > 1) {
-                      // Toggle between intersecting across and down clues
-                      const currentIdx = cell.wordIds.indexOf(selectedClueId || "");
-                      const nextClue = currentIdx === 0 ? cell.wordIds[1] : cell.wordIds[0];
-                      setSelectedClueId(nextClue);
-                    }
-                  }}
                   animate={
                     isActionWrong
                       ? {
@@ -81,12 +70,11 @@ export function CrosswordGrid() {
                           scale: isSelected ? 1.04 : 1,
                         }
                   }
-                  whileHover={{ scale: 1.03 }}
                   className={cn(
-                    "relative flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 lg:h-10 lg:w-10 cursor-pointer items-center justify-center rounded-md sm:rounded-lg border text-center transition-all duration-150",
+                    "relative flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 lg:h-10 lg:w-10 items-center justify-center rounded-md sm:rounded-lg border text-center transition-all duration-150 cursor-default",
                     // 1. Default empty cell
                     !hasLetter &&
-                      "bg-white border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-600",
+                      "bg-white border-slate-200 dark:bg-slate-900 dark:border-slate-800",
                     // 2. Filled cell with letter
                     hasLetter &&
                       "bg-slate-50/90 border-slate-300 font-bold text-slate-800 dark:bg-slate-800/90 dark:border-slate-700 dark:text-white",

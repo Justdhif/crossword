@@ -2,42 +2,30 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Users, Heart, Trophy, RotateCcw, CheckCircle2 } from "lucide-react";
+import { Users, Heart, Trophy, CheckCircle2 } from "lucide-react";
 import { useCrossword } from "@/context/crossword-context";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export function TeamScoreboard() {
-  const { teams, activeTeamId, setActiveTeamId, resetTeams } = useCrossword();
+  const { teams, activeTeamId, setActiveTeamId } = useCrossword();
 
   return (
     <Card className="border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900 shadow-none w-full select-none">
       <CardHeader className="border-b border-slate-100 pb-3 pt-4 px-4 sm:px-5 dark:border-slate-800/80">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
-              <Users className="h-4 w-4" />
-            </div>
-            <div>
-              <CardTitle className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-                Info Tim
-              </CardTitle>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Pilih tim untuk giliran menjawab
-              </p>
-            </div>
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+            <Users className="h-4 w-4" />
           </div>
-
-          <button
-            type="button"
-            onClick={resetTeams}
-            className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 hover:text-rose-600 hover:border-rose-200 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white transition-colors cursor-pointer"
-            title="Reset skor dan nyawa semua tim"
-          >
-            <RotateCcw className="h-3 w-3" />
-            <span>Reset Tim</span>
-          </button>
+          <div>
+            <CardTitle className="text-base font-bold text-slate-900 dark:text-white leading-tight">
+              Info Tim
+            </CardTitle>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Pilih tim untuk giliran menjawab
+            </p>
+          </div>
         </div>
       </CardHeader>
 

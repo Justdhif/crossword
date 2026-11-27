@@ -50,10 +50,15 @@ interface CrosswordContextType {
   isTimerRunning: boolean;
   toggleTimer: () => void;
   resetTimer: () => void;
+  // Clue Turns & Rounds (Spill unlocks after 2 rounds / 6 team turns)
+  clueTurnCounts: Record<string, number>;
+  getClueRounds: (clueId: string) => { turns: number; rounds: number; canSpill: boolean };
 }
 
 const STORAGE_KEY = "crossword_persisted_game_state_v2";
 const TEAMS_STORAGE_KEY = "crossword_teams_persisted_v1";
+const CLUE_TURNS_STORAGE_KEY = "crossword_clue_turn_counts_v1";
+const SELECTED_CLUE_STORAGE_KEY = "crossword_selected_clue_id_v1";
 
 const defaultState: GameState = {
   solvedClueIds: [],
@@ -69,7 +74,17 @@ const CrosswordContext = createContext<CrosswordContextType | undefined>(undefin
 
 export function CrosswordProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState>(defaultState);
-  const [selectedClueId, setSelectedClueId] = useState<string | null>("1");
+  const [selectedClueId, setSelectedClueId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(SELECTED_CLUE_STORAGE_KEY);
+        if (saved) return saved;
+      } catch (e) {
+        console.warn("Failed to read initial selectedClueId from localStorage", e);
+      }
+    }
+    return null;
+  });
   const [activeAction, setActiveAction] = useState<GameAction | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -117,16 +132,83 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const actionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Switch team manually: durasi timer tidak terakumulasi/hangus, langsung fresh 20 detik
-  const selectTeam = useCallback((id: number) => {
-    setActiveTeamId(id);
-    setTimerSeconds(TIMER_DURATION);
-  }, []);
+  // Clue Turn Counts (Tracks turns per clue to unlock Spill Jawaban after 2 rounds / 6 turns)
+  const [clueTurnCounts, setClueTurnCounts] = useState<Record<string, number>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(CLUE_TURNS_STORAGE_KEY);
+        if (saved) return JSON.parse(saved);
+      } catch (e) {
+        console.warn("Failed to read clueTurnCounts", e);
+      }
+    }
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLUE_TURNS_STORAGE_KEY, JSON.stringify(clueTurnCounts));
+    } catch (e) {
+      console.warn("Failed to save clueTurnCounts", e);
+    }
+  }, [clueTurnCounts]);
+
+  // Persist selectedClueId across page refreshes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        if (selectedClueId) {
+          localStorage.setItem(SELECTED_CLUE_STORAGE_KEY, selectedClueId);
+        } else {
+          localStorage.removeItem(SELECTED_CLUE_STORAGE_KEY);
+        }
+      } catch (e) {
+        console.warn("Failed to save selectedClueId to localStorage", e);
+      }
+    }
+  }, [selectedClueId]);
+
+  const incrementClueTurn = useCallback(
+    (clueId?: string | null) => {
+      const target = clueId || selectedClueId;
+      if (!target) return;
+      setClueTurnCounts((prev) => ({
+        ...prev,
+        [target]: (prev[target] || 0) + 1,
+      }));
+    },
+    [selectedClueId]
+  );
+
+  const getClueRounds = useCallback(
+    (clueId: string) => {
+      const turns = clueTurnCounts[clueId] || 0;
+      // 1 putaran = 3 tim telah mencoba (3 giliran)
+      const rounds = Math.min(2, Math.floor(turns / 3));
+      // Kebuka ketika sudah 2x putaran (turns >= 6)
+      const canSpill = turns >= 6;
+      return { turns, rounds, canSpill };
+    },
+    [clueTurnCounts]
+  );
+
+  // Switch team manually: durasi timer tidak terakumulasi/hangus, langsung fresh 20 detik & timer stop
+  const selectTeam = useCallback(
+    (id: number) => {
+      setActiveTeamId(id);
+      setTimerSeconds(TIMER_DURATION);
+      setIsTimerRunning(false);
+      incrementClueTurn(selectedClueId);
+    },
+    [selectedClueId, incrementClueTurn]
+  );
 
   const nextTeamTurn = useCallback(() => {
     setActiveTeamId((prev) => (prev % 3) + 1);
     setTimerSeconds(TIMER_DURATION);
-  }, []);
+    setIsTimerRunning(false);
+    incrementClueTurn(selectedClueId);
+  }, [selectedClueId, incrementClueTurn]);
 
   const toggleTimer = useCallback(() => {
     setIsTimerRunning((prev) => !prev);
@@ -144,9 +226,7 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
     const interval = setInterval(() => {
       setTimerSeconds((prev) => {
         if (prev <= 1) {
-          // Waktu 20 detik habis! Berganti ke tim berikutnya & reset timer
-          setActiveTeamId((curr) => (curr % 3) + 1);
-          return TIMER_DURATION;
+          return 0;
         }
         return prev - 1;
       });
@@ -154,6 +234,16 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
 
     return () => clearInterval(interval);
   }, [isTimerRunning]);
+
+  // When timer reaches 0s: switch turn, reset duration, increment turn count, and ensure next team's timer does NOT auto-start
+  useEffect(() => {
+    if (timerSeconds === 0 && isTimerRunning) {
+      setIsTimerRunning(false);
+      setTimerSeconds(TIMER_DURATION);
+      setActiveTeamId((curr) => (curr % 3) + 1);
+      incrementClueTurn(selectedClueId);
+    }
+  }, [timerSeconds, isTimerRunning, selectedClueId, incrementClueTurn]);
 
   const triggerVisualEffects = useCallback((action: GameAction) => {
     setActiveAction(action);
@@ -228,6 +318,11 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
         if (typeof parsedTeams?.activeTeamId === "number") {
           setActiveTeamId(parsedTeams.activeTeamId);
         }
+      }
+
+      const savedSelectedClue = localStorage.getItem(SELECTED_CLUE_STORAGE_KEY);
+      if (savedSelectedClue) {
+        setSelectedClueId(savedSelectedClue);
       }
     } catch (e) {
       console.warn("Failed to read from localStorage", e);
@@ -441,6 +536,9 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
       if (isCorrect) {
         nextScore += 10;
         scoreDelta = 10;
+        // Jika jawaban benar: timer ke-stop & ke-reset dari ulang (20s), tetapi tetap giliran tim yang menjawab benar tadi
+        setIsTimerRunning(false);
+        setTimerSeconds(TIMER_DURATION);
       } else {
         nextLives -= 1;
         if (nextLives <= 0) {
@@ -475,6 +573,7 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
         setIsTimerRunning(false);
         setTimerSeconds(TIMER_DURATION);
         setActiveTeamId(nextTeamId);
+        incrementClueTurn(selectedClueId);
       }
 
       return {
@@ -485,7 +584,7 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
         refilled,
       };
     },
-    [activeTeamId, teams]
+    [activeTeamId, teams, selectedClueId, incrementClueTurn]
   );
 
   const resetTeams = useCallback(() => {
@@ -505,6 +604,10 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
   const resetGame = async () => {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(CLUE_TURNS_STORAGE_KEY);
+      localStorage.removeItem(SELECTED_CLUE_STORAGE_KEY);
+      setSelectedClueId(null);
+      setClueTurnCounts({});
       resetTeams();
       resetTimer();
       const res = await fetch("/api/game", {
@@ -548,6 +651,8 @@ export function CrosswordProvider({ children }: { children: React.ReactNode }) {
         isTimerRunning,
         toggleTimer,
         resetTimer,
+        clueTurnCounts,
+        getClueRounds,
       }}
     >
       {children}
